@@ -1,0 +1,40 @@
+{
+  "encheres": [
+    {
+      "heure": 1746026679652,
+      "participant": 1,
+      "prenom": "kévin",
+      "nom": "roda",
+      "email": "kevin@owlf.school",
+      "prix": 3001
+    },
+    {
+      "heure": 1746025491718,
+      "participant": 1,
+      "prenom": "kévin",
+      "nom": "roda",
+      "email": "kevin@owlf.school",
+      "prix": 2001
+    },
+    {
+      "heure": 1746023586359,
+      "participant": 1,
+      "prenom": "kévin",
+      "nom": "roda",
+      "email": "kevin@owlf.school",
+      "prix": 1001
+    }
+  ],
+  "prix_depart": 1,
+  "palier": 1000,
+  "fin_enchere": 1746045300000,
+  "participants": [
+    {
+      "socketId": "rM-Dhrlss5xgmqlQAAAF",
+      "email": "kevin@owlf.school",
+      "prenom": "kévin",
+      "nom": "roda",
+      "numero": 1
+    }
+  ]
+}
