@@ -1,0 +1,64 @@
+{
+  "encheres": [
+    {
+      "heure": 1746532468715,
+      "participant": 2,
+      "prenom": "Lucas",
+      "nom": "LANGLOIS",
+      "email": "lucas.langlois76000@gmail.com",
+      "prix": 110000
+    },
+    {
+      "heure": 1746532440544,
+      "participant": 2,
+      "prenom": "Lucas",
+      "nom": "LANGLOIS",
+      "email": "lucas.langlois76000@gmail.com",
+      "prix": 108000
+    },
+    {
+      "heure": 1746532417896,
+      "participant": 1,
+      "prenom": "kévin",
+      "nom": "roda",
+      "email": "kevin@owlf.school",
+      "prix": 106000
+    },
+    {
+      "heure": 1746532410439,
+      "participant": 1,
+      "prenom": "kévin",
+      "nom": "roda",
+      "email": "kevin@owlf.school",
+      "prix": 104000
+    },
+    {
+      "heure": 1746532403530,
+      "participant": 2,
+      "prenom": "Lucas",
+      "nom": "LANGLOIS",
+      "email": "lucas.langlois76000@gmail.com",
+      "prix": 102000
+    }
+  ],
+  "prix_depart": 100000,
+  "palier": 2000,
+  "fin_enchere": 2756532768715,
+  "participants": [
+    {
+      "socketId": "D1_6XGFfdTkRRGIrAAAP",
+      "email": "kevin@owlf.school",
+      "prenom": "kévin",
+      "nom": "roda",
+      "numero": 1
+    },
+    {
+      "socketId": "8CsPoEXAL17he_51AAAT",
+      "email": "lucas.langlois76000@gmail.com",
+      "prenom": "Lucas",
+      "nom": "LANGLOIS",
+      "numero": 2
+    }
+  ],
+  "mandataire": "florian@agencepopote.fr"
+}

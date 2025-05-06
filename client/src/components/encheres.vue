@@ -30,8 +30,8 @@
           <td>
             {{
               item.email == props.data.email
-                ? "vous"
-                : "participant :" + item.participant
+                ? "Vous"
+                : "Participant n°" + item.participant
             }}
           </td>
           <td>{{ item.heureLisible }}</td>
@@ -42,6 +42,7 @@
     <v-btn
       variant="flat"
       class="rk_btn-e"
+      :class="{ hidden: tempsRestant <= 0 || props.data.isAdmin }"
       color="#45AFA2"
       @click="faireOffre"
       :disabled="boutonDesactive"
@@ -116,7 +117,7 @@ const enchereTerminee = computed(() => tempsRestant.value <= 0);
 
 // Dernière minute
 const derniereMinute = computed(
-  () => tempsRestant.value <= 60_000 && tempsRestant.value > 0
+  () => tempsRestant.value <= 60000 && tempsRestant.value > 0
 );
 
 // Désactiver bouton si vente terminée OU clic en attente
@@ -184,9 +185,10 @@ onMounted(() => {
     finEnchere.value = data.fin_enchere || Date.now() + 3600000;
   });
 
-  socket.on("nouvelle_offre", (nouvelleOffre) => {
+  socket.on("nouvelle_offre", (value) => {
+    finEnchere.value = value.fin_enchere;
     encheresOrdonnees.value = organiserEncheres([
-      nouvelleOffre,
+      value.nouvelleOffre,
       ...encheresOrdonnees.value,
     ]);
   });
@@ -288,6 +290,9 @@ onUnmounted(() => {
   margin-bottom: 20px;
   svg {
     margin-left: 10px;
+  }
+  &.hidden {
+    display: none;
   }
 }
 

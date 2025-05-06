@@ -46,9 +46,12 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="right">
+  <div class="right" v-if="tempsRestant > 0">
     <p>Fin de la vente dans :</p>
-    <div>{{ minutes }} : {{ secondes }}</div>
+    <div>{{ minutes }} min {{ secondes }} s</div>
+  </div>
+  <div class="right" v-else>
+    <p>Vente terminée !</p>
   </div>
 </template>
 

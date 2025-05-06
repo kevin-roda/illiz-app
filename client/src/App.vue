@@ -1,18 +1,12 @@
 <template>
-  ok
   <v-app>
-    <v-text-field
-      label="Email address"
-      placeholder="johndoe@gmail.com"
-      type="email"
-      v-model="enchereData.email"
-    ></v-text-field>
+    ok
 
-    <enchere v-if="enchereData.email.length > 10" :data="enchereData" />
+    <stats></stats>
   </v-app>
 </template>
 <script setup>
-import enchere from "./components/encheres.vue";
+import stats from "./components/statAdmin.vue";
 import { ref } from "vue";
 
 const enchereData = ref({

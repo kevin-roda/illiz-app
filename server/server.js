@@ -5,6 +5,7 @@ const { Server } = require("socket.io");
 const fs = require("fs");
 const path = require("path");
 const http = require("http");
+const https = require("https"); // si ce n’est pas déjà présent
 
 const app = express();
 const httpServer = createServer(app);
@@ -24,7 +25,7 @@ const rooms = {}; // In-memory rooms
 const lastOfferTimestamps = {}; // Anti-spam par socket
 
 const DELAI_ANTI_SPAM = 5000;
-const PROLONGATION_MINUTES = 2;
+const PROLONGATION_MINUTES = 5;
 const DELAI_PROLONGATION_MS = PROLONGATION_MINUTES * 60 * 1000;
 
 const WORDPRESS_API_URL = "https://illiz.fr/wp-json/wp/v2/nos-biens/";
@@ -67,7 +68,7 @@ function deleteRoomDisk(roomId) {
 function enregistrerParticipant(roomId, socket, email, prenom, nom) {
   const room = rooms[roomId];
   if (!room) return;
-
+  if (rooms[roomId].mandataire == email) return;
   let participantExiste = room.participants.find((p) => p.email === email);
 
   if (participantExiste) {
@@ -138,47 +139,111 @@ async function genererRapportFinal(roomId) {
   };
 }
 
-function enregistrerRapportDansWordPress(roomId, rapport) {
-  const options = {
-    hostname: "illiz.fr",
-    path: `${WORDPRESS_API_URL}${roomId}`,
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.JWT_TOKEN}`,
-    },
-  };
+async function enregistrerRapportDansWordPress(roomId, rapport) {
+  try {
+    // 1. Obtenir le token JWT
+    const token = await obtenirJWTToken();
 
-  const req = http.request(options, (res) => {
-    let data = "";
-
-    res.on("data", (chunk) => {
-      data += chunk;
-    });
-
-    res.on("end", () => {
-      if (res.statusCode !== 200) {
-        console.error(`Erreur WordPress ${res.statusCode}`);
-        return;
-      }
-
-      console.error(`✅ Rapport sauvegardé pour ${roomId}`);
-      supprimerRoom(roomId);
-    });
-  });
-
-  req.on("error", (error) => {
-    console.error("❌ Erreur WordPress:", error.message);
-  });
-
-  req.write(
-    JSON.stringify({
-      meta: {
-        statistiques_vente: JSON.stringify(rapport),
+    // 2. Construire les options pour l'appel WordPress
+    const options = {
+      hostname: "illiz.fr",
+      path: `/wp-json/wp/v2/nos-biens/${roomId}`,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
       },
-    })
-  );
-  req.end();
+    };
+
+    const req = https.request(options, (res) => {
+      let data = "";
+
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+
+      res.on("end", async () => {
+        if (res.statusCode !== 200) {
+          console.error(`Erreur WordPress ${res.statusCode}`);
+          console.error(data);
+          return;
+        }
+
+        console.error(`✅ Rapport sauvegardé pour ${roomId}`);
+        await envoyerEmailsAuxParticipants(roomId, rapport);
+        supprimerRoom(roomId);
+      });
+    });
+
+    req.on("error", (error) => {
+      console.error("❌ Erreur WordPress:", error.message);
+    });
+    console.error("Stats:", {
+      nombre_de_participants: rapport.nombre_participants,
+      derniere_offre: rapport.derniere_offre,
+    });
+    req.write(
+      JSON.stringify({
+        meta: {
+          statistiques_vente: JSON.stringify(rapport),
+          nombre_de_participants: JSON.stringify(rapport.nombre_participants),
+          derniere_offre: JSON.stringify(rapport.derniere_offre),
+        },
+        "statut-du-bien": [45],
+      })
+    );
+
+    req.end();
+  } catch (err) {
+    console.error("❌ Erreur d'authentification JWT :", err.message);
+  }
+}
+
+function obtenirJWTToken() {
+  return new Promise((resolve, reject) => {
+    const postData = JSON.stringify({
+      username: process.env.JWT_USERNAME,
+      password: process.env.JWT_PASSWORD,
+    });
+
+    const options = {
+      hostname: "illiz.fr",
+      path: "/wp-json/jwt-auth/v1/token",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(postData),
+      },
+    };
+
+    const req = https.request(options, (res) => {
+      let data = "";
+
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data);
+          if (parsed.token) {
+            resolve(parsed.token);
+          } else {
+            reject(new Error("Token non reçu"));
+          }
+        } catch (e) {
+          reject(new Error("JSON invalide"));
+        }
+      });
+    });
+
+    req.on("error", (error) => {
+      reject(error);
+    });
+
+    req.write(postData);
+    req.end();
+  });
 }
 
 function supprimerRoom(roomId) {
@@ -188,7 +253,7 @@ function supprimerRoom(roomId) {
 }
 
 // --- Timer automatique de fin de vente ---
-function lancerTimerDeFin(roomId) {
+async function lancerTimerDeFin(roomId, isLaoded = false) {
   const room = rooms[roomId];
   if (!room) return;
 
@@ -201,7 +266,12 @@ function lancerTimerDeFin(roomId) {
   const tempsRestant = room.fin_enchere - now;
 
   if (tempsRestant <= 0) {
-    console.warn(`⏰ Vente déjà finie pour room ${roomId}`);
+    console.error(`⏰ Vente déjà finie pour room ${roomId}`);
+    // si on recharge et que la vente est terminée on supprime
+    if (isLaoded) {
+      const rapport = await genererRapportFinal(roomId);
+      if (rapport) enregistrerRapportDansWordPress(roomId, rapport);
+    }
     return;
   }
 
@@ -250,6 +320,7 @@ function chargerInfosDepuisWordPress(roomId) {
             prix_depart: sanitizePrice(meta?.prix_de_depart) || 0,
             palier: sanitizePrice(meta?.pas_des_offres) || 2000,
             fin_enchere: (Number(meta?.date_de_fin_des_offres) - 7200) * 1000,
+            mandataire: meta?.mandataire,
           });
         } catch (err) {
           reject(new Error("Erreur lors du parsing JSON"));
@@ -273,7 +344,7 @@ function rechargerToutesLesRooms() {
       const roomData = loadRoomFromDisk(roomId);
       if (roomData) {
         rooms[roomId] = roomData;
-        lancerTimerDeFin(roomId);
+        lancerTimerDeFin(roomId, true);
         console.error(`✅ Room ${roomId} rechargée au démarrage`);
       }
     }
@@ -295,7 +366,7 @@ io.on("connection", async (socket) => {
     !isNonEmptyString(prenom) ||
     !isNonEmptyString(nom)
   ) {
-    console.warn("❌ Données invalides reçues :", {
+    console.error("❌ Données invalides reçues :", {
       email,
       roomId,
       prenom,
@@ -335,6 +406,7 @@ io.on("connection", async (socket) => {
           palier: infos.palier,
           fin_enchere: infos.fin_enchere,
           participants: [],
+          mandataire: infos.mandataire,
         };
 
         lancerTimerDeFin(roomId);
@@ -417,7 +489,10 @@ io.on("connection", async (socket) => {
           `🕑 Prolongation à 5 minutes depuis maintenant pour room ${roomId}`
         );
       }
-      io.to(roomId).emit("nouvelle_offre", nouvelleOffre);
+      io.to(roomId).emit("nouvelle_offre", {
+        nouvelleOffre,
+        fin_enchere: room.fin_enchere,
+      });
     } catch (error) {
       console.error("Erreur offre :", error.message);
     }
@@ -427,6 +502,71 @@ io.on("connection", async (socket) => {
     console.error(`Déconnexion socket ${socket.id}`);
   });
 });
+// --- Envois de mails ---
+const nodemailer = require("nodemailer");
+
+async function envoyerEmailsAuxParticipants(roomId, rapport) {
+  if (!rapport || !rapport.participants) return;
+  const gagnant =
+    rapport.participants.find(
+      (p) => p.email === rapport.courbe_prix[0]?.email
+    ) ||
+    rapport.participants.find(
+      (p) => p.numero === rapport.courbe_prix[0]?.participant
+    );
+  const transport = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.GMAIL_USER, // ton adresse Gmail
+      pass: process.env.GMAIL_PASS, // mot de passe d'application
+    },
+  });
+
+  const subject = "Fin de la vente aux enchères sur Illiz";
+  const text = `Bonjour, 
+
+Les enchères illiz sont à présent terminées.Le dernier prix proposé est de ${rapport.derniere_offre}€. Nous vous remercions pour votre participation et votre confiance. Votre agent illiz va vous contacter dans les plus brefs délais pour vous expliquer la suite. 
+
+Cordialement, 
+L’équipe illiz`;
+
+  for (const participant of rapport.participants) {
+    if (!participant.email) continue;
+
+    try {
+      await transport.sendMail({
+        from: `"Illiz" <${rooms[roomId].mandataire}>`,
+        to: participant.email,
+        subject,
+        text,
+      });
+      console.error(`📧 E-mail envoyé à ${participant.email}`);
+    } catch (err) {
+      console.error(
+        `❌ Échec de l'envoi à ${participant.email} :`,
+        err.message
+      );
+    }
+  }
+
+  try {
+    const texteMandataire = gagnant
+      ? `L'enchère est terminée. Le gagnant est :\n\n${gagnant.prenom} ${gagnant.nom} (${gagnant.email})\n\nAvec une dernière offre de ${rapport.derniere_offre}€.\n\nMerci de le contacter rapidement pour organiser la suite.`
+      : "L'enchère est terminée, mais aucun gagnant n’a pu être déterminé.";
+
+    await transport.sendMail({
+      from: `"Illiz" <${rooms[roomId].mandataire}>`,
+      to: rooms[roomId].mandataire,
+      subject,
+      text: texteMandataire,
+    });
+    console.error(`📧 E-mail envoyé à ${rooms[roomId].mandataire}`);
+  } catch (err) {
+    console.error(`❌ Échec de l'envoi à ${participant.email} :`, err.message);
+  }
+}
 
 // --- Démarrage serveur ---
 rechargerToutesLesRooms();
